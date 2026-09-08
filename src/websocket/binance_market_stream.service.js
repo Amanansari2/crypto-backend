@@ -235,7 +235,8 @@ const getStreamName = (
   }
 
   if (streamType === "depth") {
-    return `${normalized}@depth20@100ms`;
+    // return `${normalized}@depth20@100ms`;
+    return `${normalized}@depth@100ms`;
   }
 
   throw new Error(
@@ -574,7 +575,7 @@ const connectionMap =
     return;
   }
 };
-
+  
 
 const {
     updateOrderBook,
