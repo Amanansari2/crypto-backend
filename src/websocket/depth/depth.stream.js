@@ -116,11 +116,11 @@ const loadSnapshot = async (symbol) => {
       });
 
     if (firstValidIndex === -1) {
-      console.warn(
-        `⏳ Waiting for valid depth update: ${symbol} | ` +
-        `snapshot=${snapshotUpdateId} | ` +
-        `buffered=${buffer.length}`
-      );
+      // console.warn(
+      //   `⏳ Waiting for valid depth update: ${symbol} | ` +
+      //   `snapshot=${snapshotUpdateId} | ` +
+      //   `buffered=${buffer.length}`
+      // );
 
       book.snapshotLoaded = false;
 

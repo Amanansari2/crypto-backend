@@ -151,6 +151,32 @@ const initializeTradingWebSocket = (server) => {
     });
   });
 
+
+  marketEvents.on("trade", (data) => {
+  if (!data?.symbol) {
+    return;
+  }
+
+  const symbol = String(data.symbol)
+    .trim()
+    .toUpperCase();
+
+  wss.clients.forEach((ws) => {
+    if (
+      ws.readyState === WebSocket.OPEN &&
+      ws.tradeSubscriptions?.has(symbol)
+    ) {
+      ws.send(
+        JSON.stringify({
+          type: "TRADE",
+          data,
+        })
+      );
+    }
+  });
+});
+
+
   marketEvents.on("sharedMarketData", (data) => {
     if (!data?.symbol) {
       return;
@@ -187,6 +213,7 @@ const initializeTradingWebSocket = (server) => {
     ws.markPriceSubscriptions = new Set();
     ws.tickerSubscriptions = new Set();
     ws.sharedMarketDataSubscriptions = new Set();
+    ws.tradeSubscriptions = new Set();
 
     ws.on("pong", () => {
       ws.isAlive = true;
@@ -721,6 +748,112 @@ if (data.type === "UNSUBSCRIBE_TICKER") {
     return;
   }
 
+
+// ------------------------------------------
+// SUBSCRIBE TRADES
+// ------------------------------------------
+
+if (data.type === "SUBSCRIBE_TRADES") {
+  const symbol =
+    String(data.symbol || "")
+      .trim()
+      .toUpperCase();
+
+  if (!symbol) {
+    ws.send(
+      JSON.stringify({
+        type: "ERROR",
+        message: "symbol is required",
+      })
+    );
+
+    return;
+  }
+
+  if (ws.tradeSubscriptions.has(symbol)) {
+    ws.send(
+      JSON.stringify({
+        type: "TRADES_ALREADY_SUBSCRIBED",
+        symbol,
+      })
+    );
+
+    return;
+  }
+
+  ws.tradeSubscriptions.add(symbol);
+
+  marketStream.requireTrades(
+    symbol
+  );
+
+  console.log(
+    `📈 Client subscribed to trades ${symbol}`
+  );
+
+  ws.send(
+    JSON.stringify({
+      type: "TRADES_SUBSCRIBED",
+      symbol,
+    })
+  );
+
+  return;
+}
+
+
+// ------------------------------------------
+// UNSUBSCRIBE TRADES
+// ------------------------------------------
+
+if (data.type === "UNSUBSCRIBE_TRADES") {
+  const symbol =
+    String(data.symbol || "")
+      .trim()
+      .toUpperCase();
+
+  if (!symbol) {
+    ws.send(
+      JSON.stringify({
+        type: "ERROR",
+        message: "symbol is required",
+      })
+    );
+
+    return;
+  }
+
+  if (!ws.tradeSubscriptions.has(symbol)) {
+    ws.send(
+      JSON.stringify({
+        type: "TRADES_NOT_SUBSCRIBED",
+        symbol,
+      })
+    );
+
+    return;
+  }
+
+  ws.tradeSubscriptions.delete(symbol);
+
+  marketStream.releaseTrades(
+    symbol
+  );
+
+  console.log(
+    `📴 Client unsubscribed from trades ${symbol}`
+  );
+
+  ws.send(
+    JSON.stringify({
+      type: "TRADES_UNSUBSCRIBED",
+      symbol,
+    })
+  );
+
+  return;
+}
+
   // ------------------------------------------
 // SUBSCRIBE SHARED MARKET DATA
 // ------------------------------------------
@@ -1012,13 +1145,18 @@ const releaseClientSymbols = (ws) => {
   const hasSharedMarketDataSubscriptions =
   ws.sharedMarketDataSubscriptions &&
   ws.sharedMarketDataSubscriptions.size > 0;
+
+  const hasTradeSubscriptions =
+  ws.tradeSubscriptions &&
+  ws.tradeSubscriptions.size > 0;
   
     if (!hasSymbolSubscriptions 
         && !hasOrderBookSubscriptions 
         && !hasBookTickerSubscriptions
         &&  !hasMarkPriceSubscriptions
         && !hasTickerSubscriptions
-        && !hasSharedMarketDataSubscriptions) {
+        && !hasSharedMarketDataSubscriptions
+        && !hasTradeSubscriptions) {
       return;
     }
   
@@ -1108,6 +1246,20 @@ const releaseClientSymbols = (ws) => {
       
         ws.sharedMarketDataSubscriptions.clear();
       }
+
+      if (hasTradeSubscriptions) {
+  for (const symbol of ws.tradeSubscriptions) {
+    marketStream.releaseTrades(
+      symbol
+    );
+
+    console.log(
+      `📴 Released trades ${symbol}`
+    );
+  }
+
+  ws.tradeSubscriptions.clear();
+}
   };
 
 // --------------------------------------------------
@@ -1236,4 +1388,4 @@ module.exports = {
   getClientCount,
   getSubscribedAccountIds,
   close,
-};
+};  

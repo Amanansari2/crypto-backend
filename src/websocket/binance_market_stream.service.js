@@ -29,6 +29,11 @@ const {  depthConnections,
         sharedDataRequirements,
         createSharedMarketDataStream,
       } = require("./sharedMarketData/sharedMarketData.stream");
+
+      const {
+  tradeRequirements,
+  createTradeStream,
+} = require("./trades/trades.stream");
 // ==================================================
 // CONFIG
 // ==================================================
@@ -75,6 +80,9 @@ const marketConnections = new Map();
 
 // ticker connections
 const tickerConnections = new Map();
+
+// trades connections
+const tradeConnections = new Map();
 
 // symbol -> market data
 const marketData = new Map();
@@ -235,9 +243,12 @@ const getStreamName = (
   }
 
   if (streamType === "depth") {
-    // return `${normalized}@depth20@100ms`;
     return `${normalized}@depth@100ms`;
   }
+
+  if (streamType === "trade") {
+  return `${normalized}@aggTrade`;
+}
 
   throw new Error(
     `Unknown stream type: ${streamType}`
@@ -484,6 +495,8 @@ const connectionMap =
       ? tickerConnections
       : type === "depth"
         ? depthConnections
+        : type === "trade"
+          ? tradeConnections
         : marketConnections;
 
   // Already assigned?
@@ -537,6 +550,8 @@ const connectionMap =
       ? tickerConnections
       : type === "depth"
         ? depthConnections
+         : type === "trade"
+          ? tradeConnections
         : marketConnections;
 
   for (
@@ -649,6 +664,23 @@ const {
       manuallyDisconnected = value;
     },
   });
+
+  const {
+  updateTrade,
+  requireTrades,
+  releaseTrades,
+} = createTradeStream({
+  ensureSymbol,
+  normalizeSymbol,
+  assignSymbolToConnection,
+  removeSymbolFromConnection,
+  marketEvents,
+  LOG_CONNECTION_EVENTS,
+  SYMBOL_RELEASE_GRACE_MS,
+  setManuallyDisconnected: (value) => {
+    manuallyDisconnected = value;
+  },
+});
 
   const {
     requireSharedData,
@@ -911,6 +943,14 @@ const baseUrl =
         return;
       }
 
+      if (connection.type === "trade") {
+  if (data.e === "aggTrade") {
+    updateTrade(data);
+  }
+
+  return;
+}
+
     } catch (error) {
       console.error(
         `❌ ${connection.type} message error:`,
@@ -1038,6 +1078,8 @@ const connectionMap =
       : connection.type ===
         "depth"
         ? depthConnections
+         : connection.type === "trade"
+          ? tradeConnections
         : marketConnections;
 
   connection.manuallyClosed = true;
@@ -1436,6 +1478,20 @@ if (sharedRequirement?.releaseTimer) {
 sharedDataRequirements.delete(normalizedSymbol);
 
 
+const tradeRequirement =
+  tradeRequirements.get(normalizedSymbol);
+
+if (tradeRequirement?.releaseTimer) {
+  clearTimeout(
+    tradeRequirement.releaseTimer
+  );
+}
+
+tradeRequirements.delete(
+  normalizedSymbol
+);
+
+
 
   removeSymbolFromConnection(
     normalizedSymbol,
@@ -1456,6 +1512,11 @@ sharedDataRequirements.delete(normalizedSymbol);
     normalizedSymbol,
     "depth"
   );
+
+  removeSymbolFromConnection(
+  normalizedSymbol,
+  "trade"
+);
 
   marketData.delete(
     normalizedSymbol
@@ -1804,6 +1865,11 @@ const getConnectionStats = () => {
     depthConnections
   ),
 
+  trade:
+  getStats(
+    tradeConnections
+  ),
+
   };
 };
 
@@ -1983,6 +2049,33 @@ const disconnect = () => {
     }
   }
 
+  for (
+  const connection of
+  tradeConnections.values()
+) {
+  connection.manuallyClosed =
+    true;
+
+  if (
+    connection.reconnectTimer
+  ) {
+    clearTimeout(
+      connection.reconnectTimer
+    );
+
+    connection.reconnectTimer =
+      null;
+  }
+
+  if (connection.socket) {
+    try {
+      connection.socket.close();
+    } catch (_) {}
+
+    connection.socket = null;
+  }
+}
+
   for (const requirement of tickerRequirements.values()) {
     if (requirement.releaseTimer) {
       clearTimeout(requirement.releaseTimer);
@@ -1998,6 +2091,8 @@ const disconnect = () => {
   tickerConnections.clear();
 
   depthConnections.clear();
+
+  tradeConnections.clear();
 
   symbolRequirements.clear();
 
@@ -2015,6 +2110,21 @@ const disconnect = () => {
   }
   
   depthRequirements.clear();
+
+  for (
+  const requirement of
+  tradeRequirements.values()
+) {
+  if (
+    requirement.releaseTimer
+  ) {
+    clearTimeout(
+      requirement.releaseTimer
+    );
+  }
+}
+
+tradeRequirements.clear();
 
   marketData.clear();
 
@@ -2050,6 +2160,9 @@ releaseMarkPrice,
 
 requireTicker,
 releaseTicker,
+
+requireTrades,
+releaseTrades,
 
 requireSharedData,
 releaseSharedData,
