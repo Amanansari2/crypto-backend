@@ -25,6 +25,11 @@ const {  depthConnections,
       } = require("./ticker/ticker.stream");
 
 
+const {
+  klineRequirements,
+  createKlineStream,
+} = require("./klines/kline.stream");
+
       const {
         sharedDataRequirements,
         createSharedMarketDataStream,
@@ -83,6 +88,9 @@ const tickerConnections = new Map();
 
 // trades connections
 const tradeConnections = new Map();
+
+// kline connections
+const klineConnections = new Map();
 
 // symbol -> market data
 const marketData = new Map();
@@ -199,10 +207,12 @@ const createMarketRecord = (symbol) => ({
 
 const createConnectionState = (
   id,
-  type
+  type,
+  interval = null
 ) => ({
   id,
   type,
+  interval,
 
   // Symbols assigned to this connection
   symbols: new Set(),
@@ -225,7 +235,8 @@ const createConnectionState = (
 
 const getStreamName = (
   symbol,
-  streamType
+  streamType,
+  interval = null
 ) => {
   const normalized =
     normalizeSymbol(symbol).toLowerCase();
@@ -248,6 +259,17 @@ const getStreamName = (
 
   if (streamType === "trade") {
   return `${normalized}@aggTrade`;
+}
+
+if (streamType === "kline") {
+
+  if (!interval) {
+    throw new Error(
+      `Kline interval is required for ${symbol}`
+    );
+  }
+
+  return `${normalized}@kline_${interval}`;
 }
 
   throw new Error(
@@ -295,7 +317,8 @@ const subscribeSymbols = (
     symbols.map((symbol) =>
       getStreamName(
         symbol,
-        connection.type
+        connection.type, 
+        connection.interval
       )
     );
 
@@ -311,6 +334,7 @@ const subscribeSymbols = (
       action: "SUBSCRIBE",
       type: connection.type,
       symbols,
+      interval: connection.interval,
     });
 
 
@@ -328,7 +352,9 @@ const subscribeSymbols = (
     if (LOG_CONNECTION_EVENTS) {
       console.log(
         `📡 SUBSCRIBE ${connection.type} ${connection.id}:`,
-        symbols.join(", ")
+        connection.interval 
+        ? `${symbols.join(", ")} ${connection.interval}` 
+         : symbols.join(", ")
       );
     }
   } catch (error) {
@@ -366,7 +392,8 @@ const unsubscribeSymbols = (
     symbols.map((symbol) =>
       getStreamName(
         symbol,
-        connection.type
+        connection.type,
+        connection.interval
       )
     );
 
@@ -382,6 +409,7 @@ const unsubscribeSymbols = (
       action: "UNSUBSCRIBE",
       type: connection.type,
       symbols,
+      interval: connection.interval
     });  
 
   try {
@@ -398,7 +426,9 @@ const unsubscribeSymbols = (
     if (LOG_CONNECTION_EVENTS) {
       console.log(
         `📴 UNSUBSCRIBE ${connection.type} ${connection.id}:`,
-        symbols.join(", ")
+        connection.interval
+          ? `${symbols.join(", ")} ${connection.interval}`
+          : symbols.join(", ")
       );
     }
   } catch (error) {
@@ -414,12 +444,19 @@ const unsubscribeSymbols = (
 // ==================================================
 
 const findConnectionWithCapacity = (
-  connectionMap
+  connectionMap,
+  type,
+  interval = null
 ) => {
-  for (
-    const connection of
-    connectionMap.values()
-  ) {
+  for (const connection of connectionMap.values()) {
+
+  if (type === "kline" &&
+        connection.interval !== interval) {
+      continue;
+    }
+
+
+
     if (
       connection.symbols.size <
       MAX_STREAMS_PER_CONNECTION
@@ -437,17 +474,19 @@ const findConnectionWithCapacity = (
 
 const createConnection = (
   connectionMap,
-  type
+  type,
+  interval = null
 ) => {
   const connection =
     createConnectionState(
-      nextConnectionId++,
-      type
+      nextConnectionId++, 
+      type,
+      interval
     );
 
   connectionMap.set(
     connection.id,
-    connection
+    connection,
   );
 
   openConnection(connection);
@@ -461,18 +500,22 @@ const createConnection = (
 
 const getOrCreateConnection = (
   connectionMap,
-  type
+  type,
+  interval = null
 ) => {
   let connection =
     findConnectionWithCapacity(
-      connectionMap
+      connectionMap,
+      type,
+      interval
     );
 
   if (!connection) {
     connection =
       createConnection(
         connectionMap,
-        type
+        type,
+        interval
       );
   }
 
@@ -485,7 +528,8 @@ const getOrCreateConnection = (
 
 const assignSymbolToConnection = (
   symbol,
-  type
+  type,
+  interval = null
 ) => {
 
 const connectionMap =
@@ -497,13 +541,30 @@ const connectionMap =
         ? depthConnections
         : type === "trade"
           ? tradeConnections
+           : type === "kline"
+              ? klineConnections
         : marketConnections;
+
+          // For kline, the same symbol can exist on
+  // multiple intervals, so interval must also match.
 
   // Already assigned?
   for (
     const connection of
     connectionMap.values()
   ) {
+
+      if (type === "kline") {
+      if (
+        connection.interval === interval &&
+        connection.symbols.has(symbol)
+      ) {
+        return connection;
+      }
+
+      continue;
+    }
+
     if (
       connection.symbols.has(symbol)
     ) {
@@ -514,7 +575,8 @@ const connectionMap =
   const connection =
     getOrCreateConnection(
       connectionMap,
-      type
+      type,
+      interval
     );
 
   connection.symbols.add(symbol);
@@ -539,7 +601,8 @@ const connectionMap =
 
 const removeSymbolFromConnection = (
   symbol,
-  type
+  type,
+  interval = null
 ) => {
 
 
@@ -552,17 +615,28 @@ const connectionMap =
         ? depthConnections
          : type === "trade"
           ? tradeConnections
+          : type === "kline"
+              ? klineConnections
         : marketConnections;
 
   for (
     const connection of
     connectionMap.values()
   ) {
-    if (
-      !connection.symbols.has(symbol)
-    ) {
+
+
+ if (type === "kline") {
+      if (
+        connection.interval !== interval ||
+        !connection.symbols.has(symbol)
+      ) {
+        continue;
+      }
+    } else {
+      if(!connection.symbols.has(symbol)) {
       continue;
     }
+  }
 
     if (
       connection.socket &&
@@ -681,6 +755,28 @@ const {
     manuallyDisconnected = value;
   },
 });
+
+
+
+const {
+  updateKline,
+  requireKlines,
+  releaseKlines,
+} = createKlineStream({
+  ensureSymbol,
+  normalizeSymbol,
+  assignSymbolToConnection,
+  removeSymbolFromConnection,
+  marketEvents,
+  LOG_CONNECTION_EVENTS,
+  SYMBOL_RELEASE_GRACE_MS,
+  setManuallyDisconnected: (value) => {
+    manuallyDisconnected = value;
+  },
+});
+
+
+
 
   const {
     requireSharedData,
@@ -951,6 +1047,14 @@ const baseUrl =
   return;
 }
 
+if (connection.type === "kline") {
+  if (data.e === "kline") {
+    updateKline(data);
+  }
+
+  return;
+}
+
     } catch (error) {
       console.error(
         `❌ ${connection.type} message error:`,
@@ -1080,6 +1184,8 @@ const connectionMap =
         ? depthConnections
          : connection.type === "trade"
           ? tradeConnections
+           : connection.type === "kline"
+            ? klineConnections
         : marketConnections;
 
   connection.manuallyClosed = true;
@@ -1492,6 +1598,26 @@ tradeRequirements.delete(
 );
 
 
+const klineSymbolRequirements =
+  klineRequirements.get(normalizedSymbol);
+
+if (klineSymbolRequirements) {
+  for (
+    const requirement of
+      klineSymbolRequirements.values()
+  ) {
+    if (requirement?.releaseTimer) {
+      clearTimeout(
+        requirement.releaseTimer
+      );
+    }
+  }
+}
+
+klineRequirements.delete(
+  normalizedSymbol
+);
+
 
   removeSymbolFromConnection(
     normalizedSymbol,
@@ -1517,6 +1643,18 @@ tradeRequirements.delete(
   normalizedSymbol,
   "trade"
 );
+
+
+for (const connection of klineConnections.values()) {
+  if (connection.symbols.has(normalizedSymbol)) {
+    removeSymbolFromConnection(
+      normalizedSymbol,
+      "kline",
+      connection.interval
+    );
+  }
+}
+
 
   marketData.delete(
     normalizedSymbol
@@ -1870,6 +2008,11 @@ const getConnectionStats = () => {
     tradeConnections
   ),
 
+  kline:
+  getStats(
+    klineConnections
+  ),
+
   };
 };
 
@@ -2081,6 +2224,31 @@ const disconnect = () => {
       clearTimeout(requirement.releaseTimer);
     }
   }
+
+  for (
+  const connection of
+  klineConnections.values()
+) {
+  connection.manuallyClosed = true;
+
+  if (
+    connection.reconnectTimer
+  ) {
+    clearTimeout(
+      connection.reconnectTimer
+    );
+
+    connection.reconnectTimer = null;
+  }
+
+  if (connection.socket) {
+    try {
+      connection.socket.close();
+    } catch (_) {}
+
+    connection.socket = null;
+  }
+}
   
   tickerRequirements.clear();
 
@@ -2093,6 +2261,8 @@ const disconnect = () => {
   depthConnections.clear();
 
   tradeConnections.clear();
+
+  klineConnections.clear();
 
   symbolRequirements.clear();
 
@@ -2125,6 +2295,27 @@ const disconnect = () => {
 }
 
 tradeRequirements.clear();
+
+
+for (
+  const symbolRequirements of
+  klineRequirements.values()
+) {
+  for (
+    const requirement of
+    symbolRequirements.values()
+  ) {
+    if (requirement.releaseTimer) {
+      clearTimeout(
+        requirement.releaseTimer
+      );
+    }
+  }
+}
+
+klineRequirements.clear();
+
+
 
   marketData.clear();
 
@@ -2163,6 +2354,9 @@ releaseTicker,
 
 requireTrades,
 releaseTrades,
+
+requireKlines,
+releaseKlines,
 
 requireSharedData,
 releaseSharedData,
