@@ -35,13 +35,13 @@ const createKlineStream = ({
         ? String(k.i)
         : null,
 
-      startTime: k.t != null
+      time: k.t != null
         ? Number(k.t)
         : null,
 
       closeTime: k.T != null
         ? Number(k.T)
-        : null,
+        : null,  
 
       open: k.o != null
         ? Number(k.o)

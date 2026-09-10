@@ -157,8 +157,8 @@ const {
         error.message
       );
     }
-  };
-  
+  }; 
+    
 
   const restoreTpSlSymbols = async () => {
     const positions = await TradingPosition.findAll({

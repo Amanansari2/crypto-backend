@@ -8,6 +8,25 @@ const marketStream = require(
     "../services/trading/market_event.service"
   );
 
+
+  const ALLOWED_KLINE_INTERVALS = [
+  "1m",
+  "3m",
+  "5m",
+  "15m",
+  "30m",
+  "1h",
+  "2h",
+  "4h",
+  "6h",
+  "8h",
+  "12h",
+  "1d",
+  "3d",
+  "1w",
+  "1M",
+];
+
 let wss = null;
 
 // accountId -> Set of WebSocket clients
@@ -177,6 +196,36 @@ const initializeTradingWebSocket = (server) => {
 });
 
 
+marketEvents.on("kline", (data) => {
+  if (!data?.symbol || !data?.interval) {
+    return;
+  }
+
+  const symbol = String(data.symbol)
+    .trim()
+    .toUpperCase();
+
+  const interval = String(data.interval)
+    .trim();
+
+  const subscriptionKey = `${symbol}:${interval}`;
+
+  wss.clients.forEach((ws) => {
+    if (
+      ws.readyState === WebSocket.OPEN &&
+      ws.klineSubscriptions?.has(subscriptionKey)
+    ) {
+      ws.send(
+        JSON.stringify({
+          type: "KLINE",
+          data,
+        })
+      );
+    }
+  });
+});
+
+
   marketEvents.on("sharedMarketData", (data) => {
     if (!data?.symbol) {
       return;
@@ -214,6 +263,7 @@ const initializeTradingWebSocket = (server) => {
     ws.tickerSubscriptions = new Set();
     ws.sharedMarketDataSubscriptions = new Set();
     ws.tradeSubscriptions = new Set();
+    ws.klineSubscriptions = new Set();
 
     ws.on("pong", () => {
       ws.isAlive = true;
@@ -854,6 +904,171 @@ if (data.type === "UNSUBSCRIBE_TRADES") {
   return;
 }
 
+
+// ------------------------------------------
+// SUBSCRIBE KLINES
+// ------------------------------------------
+
+if (data.type === "SUBSCRIBE_KLINES") {
+  const symbol =
+    String(data.symbol || "")
+      .trim()
+      .toUpperCase();
+
+  const interval =
+    String(data.interval || "")
+      .trim();
+
+  if (!symbol) {
+    ws.send(
+      JSON.stringify({
+        type: "ERROR",
+        message: "symbol is required",
+      })
+    );
+
+    return;
+  }
+
+  if (!interval) {
+    ws.send(
+      JSON.stringify({
+        type: "ERROR",
+        message: "interval is required",
+      })
+    );
+
+    return;
+  }
+
+  if (!ALLOWED_KLINE_INTERVALS.includes(interval)) {
+  ws.send(
+    JSON.stringify({
+      type: "ERROR",
+      message: "Invalid kline interval",
+      interval,
+    })
+  );
+
+  return;
+}
+
+  const subscriptionKey =
+    `${symbol}:${interval}`;
+
+  if (ws.klineSubscriptions.has(subscriptionKey)) {
+    ws.send(
+      JSON.stringify({
+        type: "KLINES_ALREADY_SUBSCRIBED",
+        symbol,
+        interval,
+      })
+    );
+
+    return;
+  }
+
+  ws.klineSubscriptions.add(subscriptionKey);
+
+  marketStream.requireKlines(
+    symbol,
+    interval
+  );
+
+  console.log(
+    `🕯️ Client subscribed to klines ${symbol} ${interval}`
+  );
+
+  ws.send(
+    JSON.stringify({
+      type: "KLINES_SUBSCRIBED",
+      symbol,
+      interval,
+    })
+  );
+
+  return;
+}
+
+
+
+// ------------------------------------------
+// UNSUBSCRIBE KLINES
+// ------------------------------------------
+
+if (data.type === "UNSUBSCRIBE_KLINES") {
+  const symbol =
+    String(data.symbol || "")
+      .trim()
+      .toUpperCase();
+
+  const interval =
+    String(data.interval || "")
+      .trim();
+
+  if (!symbol) {
+    ws.send(
+      JSON.stringify({
+        type: "ERROR",
+        message: "symbol is required",
+      })
+    );
+
+    return;
+  }
+
+  if (!interval) {
+    ws.send(
+      JSON.stringify({
+        type: "ERROR",
+        message: "interval is required",
+      })
+    );
+
+    return;
+  }
+
+  const subscriptionKey =
+    `${symbol}:${interval}`;
+
+  if (!ws.klineSubscriptions.has(subscriptionKey)) {
+    ws.send(
+      JSON.stringify({
+        type: "KLINES_NOT_SUBSCRIBED",
+        symbol,
+        interval,
+      })
+    );
+
+    return;
+  }
+
+  ws.klineSubscriptions.delete(
+    subscriptionKey
+  );
+
+  marketStream.releaseKlines(
+    symbol,
+    interval
+  );
+
+  console.log(
+    `📴 Client unsubscribed from klines ${symbol} ${interval}`
+  );
+
+  ws.send(
+    JSON.stringify({
+      type: "KLINES_UNSUBSCRIBED",
+      symbol,
+      interval,
+    })
+  );
+
+  return;
+}
+
+
+
   // ------------------------------------------
 // SUBSCRIBE SHARED MARKET DATA
 // ------------------------------------------
@@ -1149,6 +1364,10 @@ const releaseClientSymbols = (ws) => {
   const hasTradeSubscriptions =
   ws.tradeSubscriptions &&
   ws.tradeSubscriptions.size > 0;
+
+  const hasKlineSubscriptions =
+  ws.klineSubscriptions &&
+  ws.klineSubscriptions.size > 0;
   
     if (!hasSymbolSubscriptions 
         && !hasOrderBookSubscriptions 
@@ -1156,7 +1375,8 @@ const releaseClientSymbols = (ws) => {
         &&  !hasMarkPriceSubscriptions
         && !hasTickerSubscriptions
         && !hasSharedMarketDataSubscriptions
-        && !hasTradeSubscriptions) {
+        && !hasTradeSubscriptions
+        && !hasKlineSubscriptions) {
       return;
     }
   
@@ -1260,6 +1480,25 @@ const releaseClientSymbols = (ws) => {
 
   ws.tradeSubscriptions.clear();
 }
+
+if (hasKlineSubscriptions) {
+  for (const subscriptionKey of ws.klineSubscriptions) {
+    const [symbol, interval] =
+      subscriptionKey.split(":");
+
+    marketStream.releaseKlines(
+      symbol,
+      interval
+    );
+
+    console.log(
+      `📴 Released klines ${symbol} ${interval}`
+    );
+  }
+
+  ws.klineSubscriptions.clear();
+}
+
   };
 
 // --------------------------------------------------

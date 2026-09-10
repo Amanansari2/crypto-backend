@@ -24,7 +24,7 @@ const getMergedCoins = async () => {
     if (symbol.startsWith("1000")) {
       tickerMap.set(symbol.replace(/^1000/, ""), ticker);
     }
-  }
+  } 
 
   const merged = [];
 
