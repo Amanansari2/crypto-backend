@@ -1177,7 +1177,9 @@ if (data.type === "UNSUBSCRIBE_SHARED_MARKET_DATA") {
         // SUBSCRIBE
         // ------------------------------------------
 
-        if (data.type === "SUBSCRIBE") {
+        // if (data.type === "SUBSCRIBE") {
+        if (data.type === "SUBSCRIBE_POSITION_PNL") {
+
           const accountId =
             String(data.accountId || "").trim();
 
@@ -1219,7 +1221,8 @@ if (data.type === "UNSUBSCRIBE_SHARED_MARKET_DATA") {
 
           ws.send(
             JSON.stringify({
-              type: "SUBSCRIBED",
+              // type: "SUBSCRIBED",
+              type: "POSITION_PNL_SUBSCRIBED",
               accountId,
             })
           );
@@ -1232,13 +1235,18 @@ if (data.type === "UNSUBSCRIBE_SHARED_MARKET_DATA") {
         // ------------------------------------------
 
         if (
-          data.type === "UNSUBSCRIBE"
+          // data.type === "UNSUBSCRIBE"
+          data.type === "UNSUBSCRIBE_POSITION_PNL"
+        
         ) {
+          const accountId = ws.accountId;
           removeClientSubscription(ws);
 
           ws.send(
             JSON.stringify({
-              type: "UNSUBSCRIBED",
+              // type: "UNSUBSCRIBED",
+           type: "POSITION_PNL_UNSUBSCRIBED",
+           accountId,
             })
           );
 

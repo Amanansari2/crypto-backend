@@ -701,7 +701,7 @@ const {
     SYMBOL_RELEASE_GRACE_MS,
     setManuallyDisconnected: (value) => {
       manuallyDisconnected = value;
-    },
+    }, 
   });
 
   const {
@@ -713,6 +713,7 @@ const {
     normalizeSymbol,
     assignSymbolToConnection,
     removeSymbolFromConnection,
+    marketData,
     marketEvents,
     LOG_CONNECTION_EVENTS,
     SYMBOL_RELEASE_GRACE_MS,
@@ -2000,7 +2001,7 @@ const getConnectionStats = () => {
 
   depth:
   getStats(
-    depthConnections
+    depthConnections  
   ),
 
   trade:
@@ -2014,7 +2015,7 @@ const getConnectionStats = () => {
   ),
 
   };
-};
+}; 
 
 // ==================================================
 // DISCONNECT EVERYTHING

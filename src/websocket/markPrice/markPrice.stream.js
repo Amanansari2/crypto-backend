@@ -5,6 +5,7 @@ const createMarkPriceStream = ({
   normalizeSymbol,
   assignSymbolToConnection,
   removeSymbolFromConnection,
+  marketData,
   marketEvents,
   LOG_CONNECTION_EVENTS,
   SYMBOL_RELEASE_GRACE_MS,
@@ -20,6 +21,8 @@ const createMarkPriceStream = ({
     if (!symbol) {
       return;
     }
+
+    const current = marketData.get(symbol);
 
     const payload = {
       symbol,
@@ -45,6 +48,37 @@ const createMarkPriceStream = ({
           : null,
       updatedAt: Date.now(),
     };
+
+    marketData.set(symbol, {
+  ...current,
+
+  markPrice:
+    payload.markPrice != null
+      ? payload.markPrice
+      : current?.markPrice,
+
+  indexPrice:
+    payload.indexPrice != null
+      ? payload.indexPrice
+      : current?.indexPrice,
+
+  fundingRate:
+    payload.fundingRate != null
+      ? payload.fundingRate
+      : current?.fundingRate,
+
+  eventTime:
+    payload.eventTime != null
+      ? payload.eventTime
+      : current?.eventTime,
+
+  transactionTime:
+    payload.transactionTime != null
+      ? payload.transactionTime
+      : current?.transactionTime,
+
+  updatedAt: payload.updatedAt,
+});
 
     marketEvents.emit(
       "markPrice",
