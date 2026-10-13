@@ -8,6 +8,12 @@ const {
   closeTrade,
 } = require("../../services/trading/trade_close.service");
 
+const {
+  placeLimitOrder,
+} = require("../../services/trading/limit_order/limit_order.service");
+
+const TradingOrder = require("../../models/trading/trading_order_model");
+
 const placeMarketOrder = async (req, res) => {
   try {
     const result =
@@ -167,12 +173,80 @@ const closePosition = async (req, res) => {
 };
 
 
+//==========================================>>>>>>>>>>>
+//----------Limit Order Controller------------------->>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+
+const placeLimitOrderController = async (req, res) => {
+  try {
+    const result =
+      await placeLimitOrder({
+        accountId: req.body.accountId,
+        symbol: req.body.symbol,
+        side: req.body.side,
+        quantity: req.body.quantity,
+        price: req.body.price,
+        leverage: req.body.leverage,
+        marginMode: req.body.marginMode,
+        reduceOnly: req.body.reduceOnly,
+        takeProfit: req.body.takeProfit,
+        stopLoss: req.body.stopLoss,
+      });
+
+    return res.status(201).json(result);
+  } catch (error) {
+    console.error(
+      "❌ Place limit order error:",
+      error.message
+    );
+
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+const getOpenLimitOrders = async (req, res) => {
+  try {
+    const { accountId } = req.params;
+
+    const orders = await TradingOrder.findAll({
+      where: {
+        accountId,
+        orderType: "LIMIT",
+        status: "OPEN",
+      },
+      order: [["createdAt", "DESC"]],
+    });
+
+    return res.status(200).json({
+      success: true,
+      orders,
+    });
+  } catch (error) {
+    console.error(
+      "❌ Get open limit orders error:",
+      error.message
+    );
+
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
+
 module.exports = {
   placeMarketOrder,
   updateTpSl,
   getTradingAccount,
   getOpenPositions,
   closePosition,
+  placeLimitOrderController,
+  getOpenLimitOrders,
 };
 
 

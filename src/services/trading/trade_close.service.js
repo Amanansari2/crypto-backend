@@ -8,6 +8,7 @@ const {
   
   const sequelize = require("../../config/db");
   const marketStream = require("../../websocket/binance_market_stream.service");
+  const {sendToAccount} = require("../../websocket/trading_client_ws.service");
   
   // Default Futures taker fee
   const FEE_RATE = Number(
@@ -500,6 +501,17 @@ const {
           symbol,
           "position"
         );
+
+
+        sendToAccount(accountId, {
+      type: "POSITION_CLOSED",
+      accountId,
+      positionId: position.id,
+      tradeId,
+      symbol,
+      status: "CLOSED",
+      timestamp: Date.now(),
+        });
       }
   
       return {

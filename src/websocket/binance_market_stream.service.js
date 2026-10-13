@@ -997,6 +997,8 @@ const baseUrl =
 
       const data = raw?.data || raw;
 
+
+
       if (!data) {
         return;
       }
@@ -1744,7 +1746,7 @@ const waitForMarketData = (
         new Error("Invalid symbol")
       );
     }
-  
+   
     const existing =
       getMarketData(normalizedSymbol);
 

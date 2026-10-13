@@ -27,6 +27,10 @@ const pnlBroadcast = require(
   "./services/trading/pnl_broadcast.service"
 );
 
+const {
+  startLimitOrderExecution,
+} = require("./services/trading/limit_order/limit_order_execution.service");
+
 const startServer = async () => {
 
   const server = http.createServer(app);
@@ -49,6 +53,7 @@ const startServer = async () => {
 
       await syncBinancePairs();
       await restoreTpSlSymbols();
+      await startLimitOrderExecution();
 
      
       startTpSlExecution();
