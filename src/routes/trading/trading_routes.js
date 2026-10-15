@@ -8,6 +8,8 @@ const {
   getOpenPositions,
   closePosition,
   getOpenLimitOrders,
+  cancelLimitOrderController,
+  modifyLimitOrderController,
 } = require("../../controllers/trading/trading_controller");
 
 const router = express.Router();
@@ -45,6 +47,16 @@ router.post(
 router.get(
   "/orders/open/:accountId",
   getOpenLimitOrders
+);
+
+router.delete(
+  "/orders/:tradeId",
+  cancelLimitOrderController
+);
+
+router.put(
+  "/orders/:tradeId/modify",
+  modifyLimitOrderController
 );
 
 module.exports = router;

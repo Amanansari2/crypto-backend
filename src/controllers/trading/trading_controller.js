@@ -11,6 +11,12 @@ const {
 const {
   placeLimitOrder,
 } = require("../../services/trading/limit_order/limit_order.service");
+const {
+  cancelLimitOrder,
+} = require("../../services/trading/limit_order/cancel_limit_order.service");
+const {
+  modifyLimitOrder,
+} = require("../../services/trading/limit_order/modify_limit_order.service");
 
 const TradingOrder = require("../../models/trading/trading_order_model");
 
@@ -237,6 +243,50 @@ const getOpenLimitOrders = async (req, res) => {
   }
 };
 
+const cancelLimitOrderController = async (req, res) => {
+  try {
+    const result = await cancelLimitOrder({
+      accountId: req.body.accountId,
+      tradeId: req.params.tradeId,
+    });
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("Cancel limit order error:", error.message);
+
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
+
+
+const modifyLimitOrderController = async (req, res) => {
+  try {
+    const result = await modifyLimitOrder({
+      accountId: req.body.accountId,
+      tradeId: req.params.tradeId,
+      price: req.body.price,
+      quantity: req.body.quantity,
+      takeProfit: req.body.takeProfit,
+      stopLoss: req.body.stopLoss,
+    });
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("Modify limit order error:", error.message);
+
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
 
 
 module.exports = {
@@ -247,6 +297,8 @@ module.exports = {
   closePosition,
   placeLimitOrderController,
   getOpenLimitOrders,
+  cancelLimitOrderController,
+  modifyLimitOrderController,
 };
 
 
