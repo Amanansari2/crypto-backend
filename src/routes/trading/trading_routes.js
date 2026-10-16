@@ -10,6 +10,9 @@ const {
   getOpenLimitOrders,
   cancelLimitOrderController,
   modifyLimitOrderController,
+  getOrderHistory,  
+  getTradingHistory,
+  getPositionHistory,
 } = require("../../controllers/trading/trading_controller");
 
 const router = express.Router();
@@ -57,6 +60,23 @@ router.delete(
 router.put(
   "/orders/:tradeId/modify",
   modifyLimitOrderController
+);
+
+//---------------------------histrory
+
+router.get(
+  "/orders/history/:accountId",
+  getOrderHistory
+);
+
+router.get(
+  "/orders/trading-history/:accountId",
+   getTradingHistory
+  );
+
+  router.get(
+  "/orders/positions/history/:accountId",
+  getPositionHistory
 );
 
 module.exports = router;
