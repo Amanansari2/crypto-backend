@@ -96,7 +96,7 @@ const {
       if (
         !Number.isFinite(leverage) ||
         leverage < 1 ||
-        leverage > 125
+        leverage > 155
       ) {
         throw new Error(
           "Leverage must be between 1 and 125"
@@ -511,6 +511,7 @@ if (takeProfit !== null && takeProfit !== undefined) {
       // ----------------------------------------------
   
       await transaction.commit();
+      marketStream.requireSharedData(symbol);
 
       console.log(
         `📈 POSITION OPEN | ${symbol} | tradeId=${newTradeId}`

@@ -179,13 +179,14 @@ const {
   
     for (const symbol of symbols) {
       marketStream.requireSymbol(symbol, "tpSl");
+       marketStream.requireSharedData(symbol);
     }
   
     console.log(
       `🔄 Restored TP/SL symbols: ${symbols.length}`,
       symbols
-    );
-  };
+    ); 
+  }; 
 
 
   // --------------------------------------------------

@@ -125,6 +125,13 @@ const {
           );
         }
   
+console.log("🔎 CLOSE PRICE DEBUG:", {
+  symbol,
+  side,
+  marketData: marketStream.getMarketData(symbol),
+  isPriceFresh: marketStream.isPriceFresh(symbol),
+});
+
         executionPrice =
           side === "BUY"
             ? toNumber(marketData.askPrice)
