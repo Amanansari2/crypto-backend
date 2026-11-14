@@ -16,13 +16,13 @@ const marketStream = require(
 const {
   sendToAccount,
   getSubscribedAccountIds,
-} = require(
+} = require( 
   "../../websocket/trading_client_ws.service"
 );
 
 const marketEvents = require(
   "./market_event.service"
-);
+); 
 
 let running = false;
 

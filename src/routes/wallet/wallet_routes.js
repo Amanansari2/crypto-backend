@@ -1,5 +1,6 @@
 
 const express = require("express");
+const authMiddleware = require("../../middlewares/auth.middleware");
 const {
   getWalletOverview,
   getWalletTransactions,
@@ -8,6 +9,7 @@ const {
 } = require("../../controllers/wallet/wallet_controller");
 
 const router = express.Router();
+router.use(authMiddleware);
 
 router.get("/overview/:accountId", getWalletOverview);
 

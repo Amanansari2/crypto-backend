@@ -28,6 +28,23 @@ const pnlBroadcast = require(
 );
 
 const {
+    verifyEmailConnection
+} = require("./services/email.service");
+
+verifyEmailConnection()
+    .then(() => {
+        console.log("Hostinger SMTP is ready");
+    })
+    .catch((error) => {
+        console.error("SMTP connection failed:", error.message);
+    });
+
+console.log("SMTP host:", process.env.SMTP_HOST);
+console.log("SMTP port:", process.env.SMTP_PORT);
+console.log("SMTP username:", process.env.SMTP_USER);
+console.log("SMTP password loaded:", Boolean(process.env.SMTP_PASS));
+
+const {
   startLimitOrderExecution,
 } = require("./services/trading/limit_order/limit_order_execution.service");
 

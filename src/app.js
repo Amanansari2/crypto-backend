@@ -8,6 +8,9 @@ const binanceRoutes = require("./routes/binance/binance_routes");
 const errorMiddleware = require("./middlewares/error.middleware");
 const tradingRoutes = require("./routes/trading/trading_routes");
 const walletRoutes = require("./routes/wallet/wallet_routes");
+const contentPagesRoutes = require("./routes/content_pages.routes");
+const authRoutes = require("./routes/auth.routes");
+const contactUsRoutes = require("./routes/contact_us.routes");
 
 
 const app = express();
@@ -25,7 +28,9 @@ app.use("/api/market", marketRoutes);
 app.use("/api/binance", binanceRoutes);
 app.use( "/api/trading", tradingRoutes);
 app.use("/api/wallet", walletRoutes);
-
+app.use("/api/content-pages", contentPagesRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/contact-us", contactUsRoutes);
 app.use(errorMiddleware);
 
 module.exports = app;

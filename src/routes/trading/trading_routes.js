@@ -1,5 +1,5 @@
 const express = require("express");
-
+const authMiddleware = require("../../middlewares/auth.middleware");
 const {
   placeMarketOrder,
   placeLimitOrderController,
@@ -16,6 +16,7 @@ const {
 } = require("../../controllers/trading/trading_controller");
 
 const router = express.Router();
+router.use(authMiddleware);
 
 router.post(
   "/orders/market",
