@@ -5,7 +5,7 @@ const marketStream = require(
   );
 
   const marketEvents = require(
-    "../services/trading/market_event.service"
+    "../services/trading/event/market_event.service"
   );
 
 

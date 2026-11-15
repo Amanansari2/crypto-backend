@@ -1,7 +1,7 @@
 const WebSocket = require("ws");
 
 const marketEvents = require(
-  "../services/trading/market_event.service"
+  "../services/trading/event/market_event.service"
 );
 
 const {  depthConnections,

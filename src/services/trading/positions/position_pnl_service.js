@@ -1,15 +1,21 @@
-const TradingPosition = require("../../models/trading/trading_position_model");
-const marketStream = require("../../websocket/binance_market_stream.service");
+const TradingPosition = require("../../../models/trading/trading_position_model");
+const marketStream = require("../../../websocket/binance_market_stream.service");
+const {
+  round,
+  toNumber,
+  calculateUnrealizedPnl,
+  calculateRoi,
+} = require("../calculations/trading_calculation.service");
 
 // --------------------------------------------------
 // Helpers
 // --------------------------------------------------
 
-const toNumber = (value) => Number(value);
+// const toNumber = (value) => Number(value);
 
-const round = (value, decimals = 8) => {
-  return Number(Number(value).toFixed(decimals));
-};
+// const round = (value, decimals = 8) => {
+//   return Number(Number(value).toFixed(decimals));
+// };
 
 // --------------------------------------------------
 // Calculate PnL for one position
@@ -37,20 +43,31 @@ const calculatePositionPnl = (position) => {
     return null;
   }
 
-  let unrealizedPnl = 0;
+  // let unrealizedPnl = 0;
 
-  if (position.side === "LONG") {
-    unrealizedPnl =
-      (markPrice - entryPrice) * quantity;
-  } else if (position.side === "SHORT") {
-    unrealizedPnl =
-      (entryPrice - markPrice) * quantity;
-  }
+  // if (position.side === "LONG") {
+  //   unrealizedPnl =
+  //     (markPrice - entryPrice) * quantity;
+  // } else if (position.side === "SHORT") {
+  //   unrealizedPnl =
+  //     (entryPrice - markPrice) * quantity;
+  // }
 
-  const roi =
-    margin > 0
-      ? (unrealizedPnl / margin) * 100
-      : 0;
+  // const roi =
+  //   margin > 0
+  //     ? (unrealizedPnl / margin) * 100
+  //     : 0;
+
+
+
+const unrealizedPnl = calculateUnrealizedPnl({
+  side: position.side,
+  entryPrice,
+  markPrice,
+  quantity,
+});
+
+const roi = calculateRoi(unrealizedPnl, margin);
 
   return {
     id: position.id,

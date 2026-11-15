@@ -3,20 +3,28 @@ const {
   TradingAccount,
   TradingOrder,
   TradingTransaction,
-} = require("../../../models/trading");
+} = require("../../../../models/trading");
 
 const BinancePair = require(
-  "../../../models/binance/binance_pair_model"
+  "../../../../models/binance/binance_pair_model"
 );
 
 const marketStream = require(
-  "../../../websocket/binance_market_stream.service"
+  "../../../../websocket/binance_market_stream.service"
 );
 
-const sequelize = require("../../../config/db");
+const sequelize = require("../../../../config/db");
 
-const round = (value, decimals = 8) =>
-  Number(Number(value).toFixed(decimals));
+
+const {
+  round,
+  calculateNotional,
+  calculateMargin,
+  calculateFee,
+} = require("../../calculations/trading_calculation.service");
+
+// const round = (value, decimals = 8) =>
+//   Number(Number(value).toFixed(decimals));
 
 const FEE_RATE = Number(
   process.env.TRADING_FEE_RATE || 0.0004
@@ -179,26 +187,54 @@ const modifyLimitOrder = async ({
       throw new Error("Invalid order leverage");
     }
 
-    const oldMargin = (oldQuantity * oldPrice) / leverage;
-    const oldFee = oldQuantity * oldPrice * FEE_RATE;
+    // const oldMargin = (oldQuantity * oldPrice) / leverage;
+    // const oldFee = oldQuantity * oldPrice * FEE_RATE;
 
-    const newMargin = (quantity * price) / leverage;
-    const newFee = quantity * price * FEE_RATE;
+    // const newMargin = (quantity * price) / leverage;
+    // const newFee = quantity * price * FEE_RATE;
 
-    const marginDifference = newMargin - oldMargin;
-    const feeDifference = newFee - oldFee;
-    const totalDifference = marginDifference + feeDifference;
 
-    const availableBalance = Number(account.availableBalance);
-    const usedMargin = Number(account.usedMargin);
+//     const oldNotional = calculateNotional(oldQuantity, oldPrice);
+// const oldMargin = calculateMargin(oldNotional, leverage);
+// const oldFee = calculateFee(oldNotional, FEE_RATE);
 
-    if (
-      totalDifference > 0 &&
-      availableBalance < totalDifference
-    ) {
-      throw new Error("Insufficient available balance");
-    }
+// const newNotional = calculateNotional(quantity, price);
+// const newMargin = calculateMargin(newNotional, leverage);
+// const newFee = calculateFee(newNotional, FEE_RATE);
 
+//     const marginDifference = newMargin - oldMargin;
+//     const feeDifference = newFee - oldFee;
+//     const totalDifference = marginDifference + feeDifference;
+
+//     const availableBalance = Number(account.availableBalance);
+//     const usedMargin = Number(account.usedMargin);
+
+
+const oldNotional = calculateNotional(oldQuantity, oldPrice);
+const oldMargin = calculateMargin(oldNotional, leverage);
+const oldFee = calculateFee(oldNotional, FEE_RATE);
+
+const newNotional = calculateNotional(quantity, price);
+const newMargin = calculateMargin(newNotional, leverage);
+const newFee = calculateFee(newNotional, FEE_RATE);
+
+const marginDifference = newMargin - oldMargin;
+
+const availableBalance = Number(account.availableBalance);
+const usedMargin = Number(account.usedMargin);
+
+    // if (
+    //   totalDifference > 0 &&
+    //   availableBalance < totalDifference
+    // ) {
+    //   throw new Error("Insufficient available balance");
+    // }
+if (
+  marginDifference > 0 &&
+  availableBalance < marginDifference
+) {
+  throw new Error("Insufficient available balance");
+}
     console.log("MODIFY ORDER DEBUG:", {
   accountId,
   orderId: order.id,
@@ -231,17 +267,29 @@ const modifyLimitOrder = async ({
       throw new Error("Order reservation transactions not found");
     }
 
+    // await account.update(
+    //   {
+    //     availableBalance: round(
+    //       availableBalance - totalDifference
+    //     ),
+    //     usedMargin: round(
+    //       Math.max(0, usedMargin + marginDifference)
+    //     ),
+    //   },
+    //   { transaction }
+    // );
+
     await account.update(
-      {
-        availableBalance: round(
-          availableBalance - totalDifference
-        ),
-        usedMargin: round(
-          Math.max(0, usedMargin + marginDifference)
-        ),
-      },
-      { transaction }
-    );
+  {
+    availableBalance: round(
+      availableBalance - marginDifference
+    ),
+    usedMargin: round(
+      Math.max(0, usedMargin + marginDifference)
+    ),
+  },
+  { transaction }
+);
 
     await marginTransaction.update(
       {
@@ -252,14 +300,23 @@ const modifyLimitOrder = async ({
       { transaction }
     );
 
+    // await feeTransaction.update(
+    //   {
+    //     amount: round(-newFee),
+    //     description:
+    //       `Fee reserved for modified LIMIT ${order.side} ${quantity} ${symbol}`,
+    //   },
+    //   { transaction }
+    // );
+
     await feeTransaction.update(
-      {
-        amount: round(-newFee),
-        description:
-          `Fee reserved for modified LIMIT ${order.side} ${quantity} ${symbol}`,
-      },
-      { transaction }
-    );
+  {
+    amount: round(-newFee),
+    description:
+      `Estimated trading fee for modified LIMIT ${order.side} ${quantity} ${symbol}`,
+  },
+  { transaction }
+);
 
     await order.update(
       {
@@ -297,7 +354,8 @@ const modifyLimitOrder = async ({
         newMargin: round(newMargin),
         previousFee: round(oldFee),
         newFee: round(newFee),
-        availableBalanceAdjustment: round(-totalDifference),
+        // availableBalanceAdjustment: round(-totalDifference),
+availableBalanceAdjustment: round(-marginDifference),
       },
     };
   } catch (error) {

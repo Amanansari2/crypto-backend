@@ -1,6 +1,9 @@
-const { TradingPosition } = require("../../models/trading");
-const marketStream = require("../../websocket/binance_market_stream.service");
-const toNumber = (value) => Number(value);
+const { TradingPosition } = require("../../../models/trading");
+const marketStream = require("../../../websocket/binance_market_stream.service");
+const {
+  toNumber,
+} = require("../calculations/trading_calculation.service");
+// const toNumber = (value) => Number(value);
 
 /**
  * Set, modify, or remove TP / SL

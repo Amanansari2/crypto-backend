@@ -1,12 +1,15 @@
 const {
     TradingPosition,
-  } = require("../../models/trading");
+  } = require("../../../models/trading");
   
-  const marketEvents = require("./market_event.service");
-  const marketStream = require("../../websocket/binance_market_stream.service");
-  const { closeTrade } = require("./trade_close.service");
+  const marketEvents = require("../event/market_event.service");
+  const marketStream = require("../../../websocket/binance_market_stream.service");
+  const { closeTrade } = require("../positions/trade_close.service");
+  const {
+  toNumber,
+} = require("../calculations/trading_calculation.service");
   
-  const toNumber = (value) => Number(value);
+  // const toNumber = (value) => Number(value);
   
   /**
    * Check whether a position's TP or SL has been triggered.

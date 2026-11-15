@@ -5,14 +5,22 @@ const {
     TradingOrderFill,
     TradingPosition,
     TradingTransaction,
-  } = require("../../models/trading");
+  } = require("../../../../models/trading");
   const {
     closeTrade,
-  } = require("./trade_close.service");
+  } = require("../../positions/trade_close.service");
   
-  const BinancePair = require("../../models/binance/binance_pair_model");
-  const marketStream = require("../../websocket/binance_market_stream.service");
-  const sequelize = require("../../config/db");
+  const BinancePair = require("../../../../models/binance/binance_pair_model");
+  const marketStream = require("../../../../websocket/binance_market_stream.service");
+  const sequelize = require("../../../../config/db");
+
+  const {
+  round,
+  toNumber,
+  calculateNotional,
+  calculateMargin,
+  calculateFee,
+} = require("../../calculations/trading_calculation.service");
   
   // Default Futures taker fee.
   // Keep this configurable through .env.
@@ -24,11 +32,11 @@ const {
   // Helpers
   // --------------------------------------------------
   
-  const toNumber = (value) => Number(value);
+  // const toNumber = (value) => Number(value);
   
-  const round = (value, decimals = 8) => {
-    return Number(Number(value).toFixed(decimals));
-  };
+  // const round = (value, decimals = 8) => {
+  //   return Number(Number(value).toFixed(decimals));
+  // };
   
   // --------------------------------------------------
   // Place Market Order
@@ -299,32 +307,53 @@ if (takeProfit !== null && takeProfit !== undefined) {
       // OPEN / INCREASE
       // ==================================================
   
-      const notional =
-        quantity * executionPrice;
+      // const notional =
+      //   quantity * executionPrice;
   
-      const margin =
-        notional / leverage;
+      // const margin =
+      //   notional / leverage;
   
-      const fee =
-        notional * FEE_RATE;
+      // const fee =
+      //   notional * FEE_RATE;
   
-      const totalRequired =
-        margin + fee;
+
+const notional = calculateNotional(quantity, executionPrice);
+const margin = calculateMargin(notional, leverage);
+const fee = calculateFee(notional, FEE_RATE);
+
+
+const requiredMargin = margin;
+
+const availableBalance =
+  toNumber(account.availableBalance);
+
+if (availableBalance < requiredMargin) {
+  throw new Error(
+    `Insufficient available balance. Required: ${round(
+      requiredMargin
+    )} USDT, Available: ${round(
+      availableBalance
+    )} USDT`
+  );
+}
+
+      // const totalRequired =
+      //   margin + fee;
   
-      const availableBalance =
-        toNumber(account.availableBalance);
+      // const availableBalance =
+      //   toNumber(account.availableBalance);
   
-      if (
-        availableBalance < totalRequired
-      ) {
-        throw new Error(
-          `Insufficient available balance. Required: ${round(
-            totalRequired
-          )} USDT, Available: ${round(
-            availableBalance
-          )} USDT`
-        );
-      }
+      // if (
+      //   availableBalance < totalRequired
+      // ) {
+      //   throw new Error(
+      //     `Insufficient available balance. Required: ${round(
+      //       totalRequired
+      //     )} USDT, Available: ${round(
+      //       availableBalance
+      //     )} USDT`
+      //   );
+      // }
   
       // ----------------------------------------------
       // Create order
@@ -424,12 +453,18 @@ if (takeProfit !== null && takeProfit !== undefined) {
       const oldUsedMargin =
         toNumber(account.usedMargin);
   
-      const newBalance =
-        oldBalance - fee;
+      // const newBalance =
+      //   oldBalance - fee;
   
-      const newAvailableBalance =
-        oldAvailableBalance -
-        totalRequired;
+      // const newAvailableBalance =
+      //   oldAvailableBalance -
+      //   totalRequired;
+  
+      const newBalance =
+  oldBalance;
+
+const newAvailableBalance =
+  oldAvailableBalance - margin;
   
       const newUsedMargin =
         oldUsedMargin + margin;

@@ -4,19 +4,25 @@ const {
   TradingOrderFill,
   TradingPosition,
   TradingTransaction,
-} = require("../../../models/trading");
+} = require("../../../../models/trading");
 
 const marketStream = require(
-  "../../../websocket/binance_market_stream.service"
+  "../../../../websocket/binance_market_stream.service"
 );
 const marketEvents = require(
-  "../market_event.service"
+  "../../event/market_event.service"
 );
 const { sendToAccount } = require(
-  "../../../websocket/trading_client_ws.service"
+  "../../../../websocket/trading_client_ws.service"
 );
+ 
+const sequelize = require("../../../../config/db");
 
-const sequelize = require("../../../config/db");
+const {
+  calculateNotional,
+  calculateMargin,
+  calculateFee,
+} = require("../../calculations/trading_calculation.service");
 
 // --------------------------------------------------
 // State
@@ -354,18 +360,28 @@ const executeLimitOrder = async (
         ? "LONG"
         : "SHORT";
 
-    const notional =
-      quantity * executionPrice;
+    // const notional =
+    //   quantity * executionPrice;
 
-    const margin =
-      notional / leverage;
+    // const margin =
+    //   notional / leverage;
 
-    const FEE_RATE = Number(
-      process.env.TRADING_FEE_RATE || 0.0004
-    );
+    // const FEE_RATE = Number(
+    //   process.env.TRADING_FEE_RATE || 0.0004
+    // );
 
-    const fee =
-      notional * FEE_RATE;
+    // const fee =
+    //   notional * FEE_RATE;
+
+    const notional = calculateNotional(quantity, executionPrice);
+
+const margin = calculateMargin(notional, leverage);
+
+const FEE_RATE = Number(
+  process.env.TRADING_FEE_RATE || 0.0004
+);
+
+const fee = calculateFee(notional, FEE_RATE);
 
     // --------------------------------------------------
     // Get account with lock
@@ -392,14 +408,29 @@ const executeLimitOrder = async (
     // Reserved values from LIMIT creation
     // --------------------------------------------------
 
-    const reservedNotional =
-      quantity * limitPrice;
+    // const reservedNotional =
+    //   quantity * limitPrice;
 
-    const reservedMargin =
-      reservedNotional / leverage;
+    // const reservedMargin =
+    //   reservedNotional / leverage;
 
-    const reservedFee =
-      reservedNotional * FEE_RATE;
+    // const reservedFee =
+    //   reservedNotional * FEE_RATE;
+
+    const reservedNotional = calculateNotional(
+  quantity,
+  limitPrice
+);
+
+const reservedMargin = calculateMargin(
+  reservedNotional,
+  leverage
+);
+
+// const reservedFee = calculateFee(
+//   reservedNotional,
+//   FEE_RATE
+// );
 
     // --------------------------------------------------
     // Account current values
@@ -421,13 +452,30 @@ const executeLimitOrder = async (
     // Convert reservation to actual fill
     // --------------------------------------------------
 
-    const newBalance =
-      oldBalance - fee;
+    // const newBalance =
+    //   oldBalance - fee;
 
-    const newAvailableBalance =
-      oldAvailableBalance +
-      (reservedMargin - margin) +
-      (reservedFee - fee);
+    // const newAvailableBalance =
+    //   oldAvailableBalance +
+    //   (reservedMargin - margin) +
+    //   (reservedFee - fee);
+
+
+const additionalMarginRequired =
+  Math.max(0, margin - reservedMargin);
+
+if (oldAvailableBalance < additionalMarginRequired) {
+  throw new Error(
+    `Insufficient available balance for margin adjustment. Required: ${additionalMarginRequired}, Available: ${oldAvailableBalance}`
+  );
+}
+
+    const newBalance =
+  oldBalance;
+
+const newAvailableBalance =
+  oldAvailableBalance +
+  (reservedMargin - margin);
 
     const newUsedMargin =
       oldUsedMargin -

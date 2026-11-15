@@ -27,13 +27,13 @@ const TradingAccount = sequelize.define(
     balance: {
       type: DataTypes.DECIMAL(30, 8),
       allowNull: false,
-      defaultValue: 10000,
+      defaultValue: 0,
     },
 
     availableBalance: {
       type: DataTypes.DECIMAL(30, 8),
       allowNull: false,
-      defaultValue: 10000,
+      defaultValue: 0,
       field: "available_balance",
     },
 

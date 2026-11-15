@@ -4,22 +4,31 @@ const {
     TradingOrderFill,
     TradingPosition,
     TradingTransaction,
-  } = require("../../models/trading");
+  } = require("../../../models/trading");
   
-  const sequelize = require("../../config/db");
-  const marketStream = require("../../websocket/binance_market_stream.service");
-  const {sendToAccount} = require("../../websocket/trading_client_ws.service");
+  const sequelize = require("../../../config/db");
+  const marketStream = require("../../../websocket/binance_market_stream.service");
+  const {sendToAccount} = require("../../../websocket/trading_client_ws.service");
   
   // Default Futures taker fee
   const FEE_RATE = Number(
     process.env.TRADING_FEE_RATE || 0.0004
   );
   
-  const toNumber = (value) => Number(value);
+  // const toNumber = (value) => Number(value);
   
-  const round = (value, decimals = 8) => {
-    return Number(Number(value).toFixed(decimals));
-  };
+  // const round = (value, decimals = 8) => {
+  //   return Number(Number(value).toFixed(decimals));
+  // };
+
+  const {
+  round,
+  toNumber,
+  calculateNotional,
+  calculateFee,
+  calculateRealizedPnl,
+  calculateReleasedMargin,
+} = require("../calculations/trading_calculation.service");
   
   /**
    * Close an existing trade.
@@ -188,40 +197,66 @@ console.log("🔎 CLOSE PRICE DEBUG:", {
       // Closing notional + fee
       // --------------------------------------------------
   
-      const notional =
-        quantity * executionPrice;
+      // const notional =
+      //   quantity * executionPrice;
   
-      const fee =
-        notional * FEE_RATE;
+      // const fee =
+      //   notional * FEE_RATE;
   
+
+      const notional = calculateNotional(
+  quantity,
+  executionPrice
+);
+
+const fee = calculateFee(
+  notional,
+  FEE_RATE
+);
+
       // --------------------------------------------------
       // Realized PnL
       // --------------------------------------------------
   
-      let realizedPnl = 0;
+      // let realizedPnl = 0;
   
-      if (positionSide === "LONG") {
-        realizedPnl =
-          (executionPrice - oldEntryPrice) *
-          quantity;
-      } else {
-        realizedPnl =
-          (oldEntryPrice - executionPrice) *
-          quantity;
-      }
+      // if (positionSide === "LONG") {
+      //   realizedPnl =
+      //     (executionPrice - oldEntryPrice) *
+      //     quantity;
+      // } else {
+      //   realizedPnl =
+      //     (oldEntryPrice - executionPrice) *
+      //     quantity;
+      // }
   
-      realizedPnl = round(realizedPnl);
-  
+      // realizedPnl = round(realizedPnl);
+      
+
+
+const realizedPnl = calculateRealizedPnl({
+  side: positionSide,
+  entryPrice: oldEntryPrice,
+  exitPrice: executionPrice,
+  quantity,
+});
+
       // --------------------------------------------------
       // Margin release
       // --------------------------------------------------
   
-      const releasedMargin =
-        oldQuantity > 0
-          ? oldMargin *
-            (quantity / oldQuantity)
-          : 0;
+      // const releasedMargin =
+      //   oldQuantity > 0
+      //     ? oldMargin *
+      //       (quantity / oldQuantity)
+      //     : 0;
   
+  
+  const releasedMargin = calculateReleasedMargin({
+  oldMargin,
+  closeQuantity: quantity,
+  oldQuantity,
+});
       const remainingQuantity =
         oldQuantity - quantity;
   
@@ -343,16 +378,24 @@ console.log("🔎 CLOSE PRICE DEBUG:", {
       const oldUsedMargin =
         toNumber(account.usedMargin);
   
-      const newBalance =
-        oldBalance +
-        realizedPnl -
-        fee;
+      // const newBalance =
+      //   oldBalance +
+      //   realizedPnl -
+      //   fee;
   
+      const newBalance =
+  oldBalance + realizedPnl;
+
+      // const newAvailableBalance =
+      //   oldAvailableBalance +
+      //   releasedMargin +
+      //   realizedPnl -
+      //   fee;
+
       const newAvailableBalance =
-        oldAvailableBalance +
-        releasedMargin +
-        realizedPnl -
-        fee;
+  oldAvailableBalance +
+  releasedMargin +
+  realizedPnl;
   
       const newUsedMargin =
         Math.max(
@@ -403,12 +446,11 @@ console.log("🔎 CLOSE PRICE DEBUG:", {
             round(releasedMargin),
   
           balanceBefore:
-            round(oldBalance),
+            round(oldBalance + realizedPnl),
   
           balanceAfter:
             round(
-              oldBalance +
-              realizedPnl
+              newBalance 
             ),
   
           referenceType: "ORDER",

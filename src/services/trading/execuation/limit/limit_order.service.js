@@ -4,31 +4,39 @@ const {
   TradingAccount,
   TradingOrder,
   TradingTransaction,
-} = require("../../../models/trading");
+} = require("../../../../models/trading");
 
 const BinancePair = require(
-  "../../../models/binance/binance_pair_model"
+  "../../../../models/binance/binance_pair_model"
 );
 
 const marketStream = require(
-  "../../../websocket/binance_market_stream.service"
+  "../../../../websocket/binance_market_stream.service"
 );
 
-const sequelize = require("../../../config/db");
+const sequelize = require("../../../../config/db");
 
 const FEE_RATE = Number(
   process.env.TRADING_FEE_RATE || 0.0004
 );
 
+const {
+  toNumber,
+  round,
+  calculateNotional,
+  calculateMargin,
+  calculateFee,
+} = require("../../calculations/trading_calculation.service");
+
 // --------------------------------------------------
 // Helpers
 // --------------------------------------------------
 
-const toNumber = (value) => Number(value);
+// const toNumber = (value) => Number(value);
 
-const round = (value, decimals = 8) => {
-  return Number(Number(value).toFixed(decimals));
-};
+// const round = (value, decimals = 8) => {
+//   return Number(Number(value).toFixed(decimals));
+// };
 
 // --------------------------------------------------
 // Place Limit Order
@@ -331,17 +339,25 @@ const placeLimitOrder = async ({
     // Calculate reservation
     // --------------------------------------------------
 
-    const notional =
-      quantity * price;
+    // const notional =
+    //   quantity * price;
 
-    const margin =
-      notional / leverage;
+    // const margin =
+    //   notional / leverage;
 
-    const fee =
-      notional * FEE_RATE;
+    // const fee =
+    //   notional * FEE_RATE;
 
-    const totalRequired =
-      margin + fee;
+    const notional = calculateNotional(quantity, price);
+
+const margin = calculateMargin(notional, leverage);
+
+const fee = calculateFee(notional, FEE_RATE);
+
+    // const totalRequired =
+    //   margin + fee;
+
+const totalRequired = margin;
 
     const oldBalance =
       toNumber(account.balance);
@@ -508,7 +524,7 @@ const placeLimitOrder = async ({
           order.id,
 
         description:
-          `Fee reserved for LIMIT ${side} ${quantity} ${symbol}`,
+          `Estimated trading fee for LIMIT ${side} ${quantity} ${symbol}`,
       },
       {
         transaction,

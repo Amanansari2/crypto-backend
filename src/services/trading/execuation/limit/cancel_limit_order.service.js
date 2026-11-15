@@ -3,16 +3,22 @@ const {
   TradingAccount,
   TradingOrder,
   TradingTransaction,
-} = require("../../../models/trading");
+} = require("../../../../models/trading");
 
-const sequelize = require("../../../config/db");
+const sequelize = require("../../../../config/db");
 
-const round = (value, decimals = 8) =>
-  Number(Number(value).toFixed(decimals));
+// const round = (value, decimals = 8) =>
+//   Number(Number(value).toFixed(decimals));
 
-const FEE_RATE = Number(
-  process.env.TRADING_FEE_RATE || 0.0004
-);
+// const FEE_RATE = Number(
+//   process.env.TRADING_FEE_RATE || 0.0004
+// );
+
+const {
+  round,
+  calculateNotional,
+  calculateMargin,
+} = require("../../calculations/trading_calculation.service");
 
 const cancelLimitOrder = async ({ accountId, tradeId }) => {
   const transaction = await sequelize.transaction();
@@ -61,9 +67,25 @@ const cancelLimitOrder = async ({ accountId, tradeId }) => {
     const price = Number(order.price);
     const leverage = Number(order.leverage);
 
-    const reservedMargin = (quantity * price) / leverage;
-    const reservedFee = quantity * price * FEE_RATE;
-    const amountToRelease = reservedMargin + reservedFee;
+    // const reservedMargin = (quantity * price) / leverage;
+    // const reservedFee = quantity * price * FEE_RATE;
+    // const amountToRelease = reservedMargin + reservedFee;
+
+
+const reservedNotional = calculateNotional(quantity, price);
+
+const reservedMargin = calculateMargin(
+  reservedNotional,
+  leverage
+);
+
+// const reservedFee = calculateFee(
+//   reservedNotional,
+//   FEE_RATE
+// );
+
+// const amountToRelease = reservedMargin + reservedFee;
+// const amountToRelease = reservedMargin;
 
     const oldBalance = Number(account.balance);
     const oldAvailableBalance = Number(account.availableBalance);
@@ -78,7 +100,8 @@ const cancelLimitOrder = async ({ accountId, tradeId }) => {
     await account.update(
       {
         availableBalance: round(
-          oldAvailableBalance + amountToRelease
+          // oldAvailableBalance + amountToRelease
+         oldAvailableBalance + reservedMargin
         ),
         usedMargin: round(
           Math.max(0, oldUsedMargin - reservedMargin)
@@ -87,20 +110,32 @@ const cancelLimitOrder = async ({ accountId, tradeId }) => {
       { transaction }
     );
 
-    await TradingTransaction.create(
-      {
-        accountId,
-        type: "MARGIN_RELEASE",
-        amount: round(amountToRelease),
-        balanceBefore: round(oldBalance),
-        balanceAfter: round(oldBalance),
-        referenceType: "ORDER",
-        referenceId: order.id,
-        description: `Reserved margin and fee released for cancelled LIMIT order ${order.symbol}`,
-      },
-      { transaction }
-    );
-
+    // await TradingTransaction.create(
+    //   {
+    //     accountId,
+    //     type: "MARGIN_RELEASE",
+    //     amount: round(amountToRelease),
+    //     balanceBefore: round(oldBalance),
+    //     balanceAfter: round(oldBalance),
+    //     referenceType: "ORDER",
+    //     referenceId: order.id,
+    //     description: `Reserved margin and fee released for cancelled LIMIT order ${order.symbol}`,
+    //   },
+    //   { transaction }
+    // );
+await TradingTransaction.create(
+  {
+    accountId,
+    type: "MARGIN_RELEASE",
+    amount: round(reservedMargin),
+    balanceBefore: round(oldBalance),
+    balanceAfter: round(oldBalance),
+    referenceType: "ORDER",
+    referenceId: order.id,
+    description: `Reserved margin released for cancelled LIMIT order ${order.symbol}`,
+  },
+  { transaction }
+);
     await transaction.commit();
 
     return {
@@ -112,11 +147,16 @@ const cancelLimitOrder = async ({ accountId, tradeId }) => {
         symbol: order.symbol,
         status: "CANCELLED",
       },
-      released: {
-        margin: round(reservedMargin),
-        fee: round(reservedFee),
-        total: round(amountToRelease),
-      },
+      // released: {
+      //   margin: round(reservedMargin),
+      //   fee: round(reservedFee),
+      //   total: round(amountToRelease),
+      // },
+released: {
+  margin: round(reservedMargin),
+  fee: 0,
+  total: round(reservedMargin),
+},
     };
   } catch (error) {
     if (!transaction.finished) {

@@ -6,22 +6,22 @@ const {
 } = require("./position_pnl_service");
 
 const TradingPosition = require(
-  "../../models/trading/trading_position_model"
+  "../../../models/trading/trading_position_model"
 );
 
 const marketStream = require(
-  "../../websocket/binance_market_stream.service"
+  "../../../websocket/binance_market_stream.service"
 );
 
 const {
   sendToAccount,
   getSubscribedAccountIds,
 } = require( 
-  "../../websocket/trading_client_ws.service"
+  "../../../websocket/trading_client_ws.service"
 );
 
 const marketEvents = require(
-  "./market_event.service"
+  "../event/market_event.service"
 ); 
 
 let running = false;

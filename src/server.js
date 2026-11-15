@@ -8,7 +8,7 @@ const logger = require("./utils/logger");
 const {
   startTpSlExecution,
   restoreTpSlSymbols
-} = require("./services/trading/tp_sl_execution.service");
+} = require("./services/trading/risk/tp_sl_execution.service");
 
 const syncBinancePairs = require(
   "./services/binance/binance.sync.service"
@@ -24,7 +24,7 @@ const tradingClientWs = require(
   "./websocket/trading_client_ws.service"
 );
 const pnlBroadcast = require(
-  "./services/trading/pnl_broadcast.service"
+  "./services/trading/positions/pnl_broadcast.service"
 );
 
 const {
@@ -46,7 +46,7 @@ console.log("SMTP password loaded:", Boolean(process.env.SMTP_PASS));
 
 const {
   startLimitOrderExecution,
-} = require("./services/trading/limit_order/limit_order_execution.service");
+} = require("./services/trading/execuation/limit/limit_order_execution.service");
 
 
 
