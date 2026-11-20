@@ -1,5 +1,5 @@
-// const env = require("./env");
+const env = require("./env");
 
-// module.exports = {
-//   baseUrl: env.coingeckoBaseUrl
-// };
+module.exports = {
+  baseUrl: env.coingeckoBaseUrl,
+};

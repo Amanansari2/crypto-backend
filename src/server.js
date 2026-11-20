@@ -6,10 +6,16 @@ const env = require("./config/env");
 const sequelize = require("./config/db");
 const logger = require("./utils/logger");
 const {
+  startMarketOverviewJob,
+  startFearGreedJob,
+  startMarketHistoryCleanupJob,
+} = require("./jobs/market/market_overview.job");
+
+const {
   startTpSlExecution,
   restoreTpSlSymbols
 } = require("./services/trading/risk/tp_sl_execution.service");
-
+ 
 const syncBinancePairs = require(
   "./services/binance/binance.sync.service"
 );
@@ -69,7 +75,9 @@ const startServer = async () => {
       await sequelize.authenticate();
 
       logger.info("Database connected");
-
+await startMarketOverviewJob(); 
+await startFearGreedJob();
+      await startMarketHistoryCleanupJob();
       await syncBinancePairs();
       await restoreTpSlSymbols();
       await startLimitOrderExecution();

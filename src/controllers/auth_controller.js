@@ -6,6 +6,7 @@ const env = require("../config/env");
 const { sendEmail } = require("../services/email.service");
 const sequelize = require("../config/db");
 const { TradingAccount } = require("../models/trading");
+const UserSession = require("../models/auth/user_session_model");
 
 // No Redis/database schema changes: temporary OTP state is kept in this process.
 // It is cleared on server restart and is not shared across multiple Node instances.
@@ -287,25 +288,112 @@ exports.resendVerification = async (req, res, next) => {
     }
 };
 
+// exports.login = async (req, res, next) => {
+//     try {
+//         const email = normalizeEmail(req.body.email), password = req.body.password;
+//         if (!email || !password) return res.status(400).json({ success: false, message: "Email and password are required." });
+//         const user = await Register.findOne({ where: { email } });
+//         if (!user || !(await bcrypt.compare(password, user.password))) return res.status(401).json({ success: false, message: "Invalid email or password." });
+//         if (!user.is_email_verified || user.account_status !== "active") return res.status(403).json({ success: false, code: "EMAIL_NOT_VERIFIED", message: "Please verify your email before logging in." });
+//         if (
+//     !env.jwtSecret ||
+//     typeof env.jwtSecret !== "string" ||
+//     env.jwtSecret.length < 32
+// ) {
+//     throw new Error("Configure a strong JWT_SECRET in the .env.");
+// }
+//         user.last_login_at = new Date(); await user.save();
+//         const token = jwt.sign({ sub: String(user.id), uid: user.uid }, env.jwtSecret, { expiresIn: process.env.JWT_EXPIRES_IN || "1d", issuer: "terminal1" });
+//         return res.json({ success: true, message: "Login successful.", data: { token, user: publicUser(user) } });
+//     } catch (error) { next(error); }
+// };
+
+
+
 exports.login = async (req, res, next) => {
     try {
-        const email = normalizeEmail(req.body.email), password = req.body.password;
-        if (!email || !password) return res.status(400).json({ success: false, message: "Email and password are required." });
+        const email = normalizeEmail(req.body.email);
+        const password = req.body.password;
+
+        if (!email || !password) {
+            return res.status(400).json({
+                success: false,
+                message: "Email and password are required."
+            });
+        }
+
         const user = await Register.findOne({ where: { email } });
-        if (!user || !(await bcrypt.compare(password, user.password))) return res.status(401).json({ success: false, message: "Invalid email or password." });
-        if (!user.is_email_verified || user.account_status !== "active") return res.status(403).json({ success: false, code: "EMAIL_NOT_VERIFIED", message: "Please verify your email before logging in." });
+
+        if (!user || !(await bcrypt.compare(password, user.password))) {
+            return res.status(401).json({
+                success: false,
+                message: "Invalid email or password."
+            });
+        }
+
+        if (!user.is_email_verified || user.account_status !== "active") {
+            return res.status(403).json({
+                success: false,
+                code: "EMAIL_NOT_VERIFIED",
+                message: "Please verify your email before logging in."
+            });
+        }
+
         if (
-    !env.jwtSecret ||
-    typeof env.jwtSecret !== "string" ||
-    env.jwtSecret.length < 32
-) {
-    throw new Error("Configure a strong JWT_SECRET in the .env.");
-}
-        user.last_login_at = new Date(); await user.save();
-        const token = jwt.sign({ sub: String(user.id), uid: user.uid }, env.jwtSecret, { expiresIn: process.env.JWT_EXPIRES_IN || "1d", issuer: "terminal1" });
-        return res.json({ success: true, message: "Login successful.", data: { token, user: publicUser(user) } });
-    } catch (error) { next(error); }
+            !env.jwtSecret ||
+            typeof env.jwtSecret !== "string" ||
+            env.jwtSecret.length < 32
+        ) {
+            throw new Error("Configure a strong JWT_SECRET in the .env.");
+        }
+
+        user.last_login_at = new Date();
+        await user.save();
+
+        // Generate refresh token
+        const refreshToken = crypto.randomBytes(64).toString("hex");
+        const refreshTokenHash = hash(refreshToken);
+
+        const expiresAt = new Date(
+            Date.now() + 30 * 24 * 60 * 60 * 1000
+        );
+
+        // Create a separate session for this login
+        const session = await UserSession.create({
+            user_id: user.id,
+            refresh_token_hash: refreshTokenHash,
+            expires_at: expiresAt
+        });
+
+        // Generate 15-minute access token
+        const accessToken = jwt.sign(
+            {
+                sub: String(user.id),
+                uid: user.uid,
+                sid: String(session.id)
+            },
+            env.jwtSecret,
+            {
+                expiresIn: "15m",
+                issuer: "terminal1"
+            }
+        );
+
+        return res.json({
+            success: true,
+            message: "Login successful.",
+            data: {
+                token: accessToken,
+                refresh_token: refreshToken,
+                user: publicUser(user)
+            }
+        });
+
+    } catch (error) {
+        next(error);
+    }
 };
+
 
 exports.forgotPassword = async (req, res, next) => {
     try {
@@ -376,4 +464,149 @@ exports.changePassword = async (req, res, next) => {
     } catch (error) { next(error); }
 };
 
-exports.logout = async (req, res) => res.json({ success: true, message: "Logged out. Please discard your authentication token." });
+
+exports.refresh = async (req, res, next) => {
+    let transaction;
+
+    try {
+        const refreshToken = String(req.body.refresh_token || "").trim();
+
+        if (!refreshToken) {
+            return res.status(401).json({
+                success: false,
+                message: "Refresh token is required."
+            });
+        }
+
+        transaction = await sequelize.transaction();
+
+        // Find and lock the existing session
+        const session = await UserSession.findOne({
+            where: {
+                refresh_token_hash: hash(refreshToken),
+                revoked_at: null
+            },
+            transaction,
+            lock: transaction.LOCK.UPDATE
+        });
+
+        if (!session) {
+            await transaction.rollback();
+            transaction = null;
+
+            return res.status(401).json({
+                success: false,
+                message: "Invalid or revoked refresh token. Please log in again."
+            });
+        }
+
+        // Check refresh token expiry
+        if (new Date(session.expires_at) <= new Date()) {
+            session.revoked_at = new Date();
+            await session.save({ transaction });
+
+            await transaction.commit();
+            transaction = null;
+
+            return res.status(401).json({
+                success: false,
+                message: "Refresh token expired. Please log in again."
+            });
+        }
+
+        const user = await Register.findByPk(session.user_id, {
+            transaction
+        });
+
+        if (!user || user.account_status !== "active" || !user.is_email_verified) {
+            session.revoked_at = new Date();
+            await session.save({ transaction });
+
+            await transaction.commit();
+            transaction = null;
+
+            return res.status(401).json({
+                success: false,
+                message: "User account is unavailable. Please log in again."
+            });
+        }
+
+        // Rotate refresh token
+        const newRefreshToken = crypto.randomBytes(64).toString("hex");
+
+        session.refresh_token_hash = hash(newRefreshToken);
+        session.expires_at = new Date(
+            Date.now() + 30 * 24 * 60 * 60 * 1000
+        );
+
+        await session.save({ transaction });
+
+        // Generate new access token
+        const accessToken = jwt.sign(
+            {
+                sub: String(user.id),
+                uid: user.uid,
+                sid: String(session.id)
+            },
+            env.jwtSecret,
+            {
+                expiresIn: "15m",
+                issuer: "terminal1"
+            }
+        );
+
+        await transaction.commit();
+        transaction = null;
+
+        return res.json({
+            success: true,
+            message: "Token refreshed successfully.",
+            data: {
+                token: accessToken,
+                refresh_token: newRefreshToken
+            }
+        });
+
+    } catch (error) {
+        if (transaction) {
+            await transaction.rollback();
+        }
+
+        next(error);
+    }
+};
+
+
+// exports.logout = async (req, res) => res.json({ success: true, message: "Logged out. Please discard your authentication token." });
+
+
+
+exports.logout = async (req, res, next) => {
+    try {
+        const session = await UserSession.findOne({
+            where: {
+                id: req.auth.sessionId,
+                user_id: req.auth.userId,
+                revoked_at: null
+            }
+        });
+
+        if (!session) {
+            return res.status(401).json({
+                success: false,
+                message: "Session is already invalid or logged out."
+            });
+        }
+
+        session.revoked_at = new Date();
+        await session.save();
+
+        return res.json({
+            success: true,
+            message: "Logged out successfully."
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};

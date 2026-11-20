@@ -13,5 +13,6 @@ router.post("/reset-password", authController.resetPassword);
 router.get("/me", authMiddleware, authController.me);
 router.post("/change-password", authMiddleware, authController.changePassword);
 router.post("/logout", authMiddleware, authController.logout);
+router.post("/refresh", authController.refresh);
 
 module.exports = router;
